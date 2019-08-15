@@ -27,6 +27,7 @@ contract FlightSuretyApp {
     uint8 private constant STATUS_CODE_LATE_OTHER = 50;
 
     uint private constant REGISTERING_AIRLINE_WITHOUT_CONSENSUS = 4;
+    uint private constant MAX_INSURANCE = 1 ether;
 
     address private contractOwner;          // Account used to deploy contract
 
@@ -43,6 +44,8 @@ contract FlightSuretyApp {
     event AirlineVoted(address indexed account, uint votedCount);
     event AirlineFunded(address indexed account, uint funds);
     event AirlineIsOperational(address indexed airline);
+    event FlightRegistered(string flight,address airline);
+
 
 
     /********************************************************************************************/
@@ -157,13 +160,36 @@ contract FlightSuretyApp {
     *
     */
     function registerFlight(string memory flight, uint timestamp)
-    external
+    public
     requireIsOperational
     airlineIsOperational(msg.sender)
     {
         bytes32 flightKey = getFlightKey(msg.sender,flight,timestamp);
-        flightSuretyData.registerFlight(flightKey, msg.sender);
+        Flight memory newFlight = Flight(true, STATUS_CODE_UNKNOWN, now, msg.sender);
+        flights[flightKey] = newFlight;
+        emit FlightRegistered(flight,msg.sender);
     }
+
+    function buyInsurance(string memory flight, uint timestamp,address airline)
+    public
+    payable
+    requireIsOperational
+    airlineIsOperational(airline)
+    {
+        require(msg.value <= MAX_INSURANCE, "Up to 1 ether for purchasing flight insurance");
+        bytes32 insuranceKey = _buildInsuranceKey(msg.sender, flight, timestamp);
+        flightSuretyData.buy(insuranceKey, msg.value);
+    }
+
+    function getInsurance(string memory flight, uint timestamp)
+    public
+    view
+    returns(uint)
+    {
+        bytes32 insuranceKey = _buildInsuranceKey(msg.sender, flight, timestamp);
+        return flightSuretyData.getinsurance(insuranceKey);
+    }
+
 
    /**
     * @dev Called after oracle has updated flight status
@@ -220,6 +246,14 @@ contract FlightSuretyApp {
         emit AirlineIsOperational(airline);
     }
 
+    function _buildInsuranceKey(address passenger, string memory flight, uint timestamp)
+    private
+    pure
+    returns(bytes32)
+    {
+        return keccak256(abi.encodePacked(passenger, flight, timestamp));
+    }
+
 
 // region ORACLE MANAGEMENT
 
@@ -266,29 +300,22 @@ contract FlightSuretyApp {
 
 
     // Register an oracle with the contract
-    function registerOracle
-                            (
-                            )
-                            external
-                            payable
+    function registerOracle()
+    external
+    payable
     {
         // Require registration fee
         require(msg.value >= REGISTRATION_FEE, "Registration fee is required");
 
         uint8[3] memory indexes = generateIndexes(msg.sender);
 
-        oracles[msg.sender] = Oracle({
-                                        isRegistered: true,
-                                        indexes: indexes
-                                    });
+        oracles[msg.sender] = Oracle({isRegistered: true,indexes: indexes});
     }
 
-    function getMyIndexes
-                            (
-                            )
-                            view
-                            external
-                            returns(uint8[3])
+    function getMyIndexes()
+    view
+    external
+    returns(uint8[3])
     {
         require(oracles[msg.sender].isRegistered, "Not registered as an oracle");
 
@@ -302,20 +329,13 @@ contract FlightSuretyApp {
     // For the response to be accepted, there must be a pending request that is open
     // and matches one of the three Indexes randomly assigned to the oracle at the
     // time of registration (i.e. uninvited oracles are not welcome)
-    function submitOracleResponse
-                        (
-                            uint8 index,
-                            address airline,
-                            string flight,
-                            uint256 timestamp,
-                            uint8 statusCode
-                        )
-                        external
+    function submitOracleResponse(uint8 index,address airline,string flight,uint256 timestamp,uint8 statusCode)
+    external
     {
         require((oracles[msg.sender].indexes[0] == index) || (oracles[msg.sender].indexes[1] == index) || (oracles[msg.sender].indexes[2] == index), "Index does not match oracle request");
 
 
-        bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp)); 
+        bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp));
         require(oracleResponses[key].isOpen, "Flight or timestamp do not match oracle request");
 
         oracleResponses[key].responses[statusCode].push(msg.sender);
@@ -333,30 +353,22 @@ contract FlightSuretyApp {
     }
 
 
-    function getFlightKey
-                        (
-                            address airline,
-                            string flight,
-                            uint256 timestamp
-                        )
-                        pure
-                        internal
-                        returns(bytes32) 
+    function getFlightKey(address airline,string flight, uint256 timestamp)
+    pure
+    internal
+    returns(bytes32)
     {
         return keccak256(abi.encodePacked(airline, flight, timestamp));
     }
 
     // Returns array of three non-duplicating integers from 0-9
-    function generateIndexes
-                            (                       
-                                address account         
-                            )
-                            internal
-                            returns(uint8[3])
+    function generateIndexes(address account)
+    internal
+    returns(uint8[3])
     {
         uint8[3] memory indexes;
         indexes[0] = getRandomIndex(account);
-        
+
         indexes[1] = indexes[0];
         while(indexes[1] == indexes[0]) {
             indexes[1] = getRandomIndex(account);
@@ -371,12 +383,9 @@ contract FlightSuretyApp {
     }
 
     // Returns array of three non-duplicating integers from 0-9
-    function getRandomIndex
-                            (
-                                address account
-                            )
-                            internal
-                            returns (uint8)
+    function getRandomIndex(address account)
+    internal
+    returns (uint8)
     {
         uint8 maxValue = 10;
 

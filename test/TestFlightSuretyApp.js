@@ -28,7 +28,7 @@ contract('FlightSuretyApp', (accounts) => {
     // const oracles = accounts.slice(10, 30).map(account => new MockOracle(account));
 
     const testFlight = {
-        flightNumber: 'TEST123',
+        flightNumber: 'ABC12',
         timestamp: Date.parse('01 Jan 2009 09:00:00 GMT'),
     };
 
@@ -113,122 +113,69 @@ contract('FlightSuretyApp', (accounts) => {
         });
     });
 
-    describe('registerFlight function', () => {
+    describe('Flight Registration', () => {
         it('registers a new flight', async () => {
             const { flightNumber, timestamp } = testFlight;
-            const tx = await instance.registerFlight(flightNumber, timestamp, { from: airline1 });
+            const tx = await appContract.registerFlight(flightNumber, timestamp, { from: airline1 });
             truffleAssert.eventEmitted(tx, 'FlightRegistered', event => (
                 event.airline === airline1
                 && event.flight === flightNumber
-                && event.timestamp.toNumber() === timestamp
             ));
         });
 
-    //     it('refuses a request from not registered airline', async () => {
-    //         const flightNumber = 'TEST999';
-    //         const timestamp = Date.now();
+        it('Unregistered Airline cannot register a flight', async () => {
+            const flightNumber = 'TEST12';
+            const timestamp = Date.now();
+            var status = false;
+            try {
+                await appContract.registerFlight(flightNumber, timestamp, { from: notRegistered1 });
+            } catch (error) {
+                status = true
+            }
+            assert.equal(status,true);
+        });
 
-    //         try {
-    //             await instance.registerFlight(flightNumber, timestamp, { from: notRegistered1 });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Not Registered airline/);
-    //         }
-    //     });
-
-    //     it('refuses a request from a airline funded less than 10 ether', async () => {
-    //         const flightNumber = 'TEST999';
-    //         const timestamp = Date.now();
-
-    //         try {
-    //             await instance.registerFlight(flightNumber, timestamp, { from: airline2 });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Deposit is inadequet/);
-    //         }
-    //     });
-
-    //     it('refuses any requests when the contract is not operational', async () => {
-    //         const flightNumber = 'TEST999';
-    //         const timestamp = Date.now();
-
-    //         await instance.setOperatingStatus(false, { from: owner });
-
-    //         try {
-    //             await instance.registerFlight(flightNumber, timestamp, { from: airline1 });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Contract is currently not operational/);
-    //         }
-
-    //         await instance.setOperatingStatus(true, { from: owner });
-    //     });
+        it('refuses a request from a airline funded less than 10 ether', async () => {
+            const flightNumber = 'TEST999';
+            const timestamp = Date.now();
+            var status = false;
+            try {
+                await appContract.registerFlight(flightNumber, timestamp, { from: airline2 });
+            } catch (error) {
+                status = true
+            }
+            assert.equal(status,true);
+        });
     });
 
-    // describe('buyInsurance function', () => {
-    //     it('allows passengers to purchase insurance', async () => {
-    //         const { flightNumber, timestamp } = testFlight;
+    describe('buyInsurance function', () => {
+        it('allows passengers to purchase insurance', async () => {
+            const { flightNumber, timestamp } = testFlight;
 
-    //         const tx = await instance.buyInsurance(flightNumber, timestamp, {
-    //             from: passenger1,
-    //             value: premium,
-    //         });
+            const tx = await appContract.buyInsurance(flightNumber, timestamp, airline1 , {
+                from: passenger1,
+                value: premium,
+            });
 
-    //         truffleAssert.eventEmitted(tx, 'BuyInsurance', event => (
-    //             event.account === passenger1
-    //             && event.flight === flightNumber
-    //             && event.timestamp.toNumber() === timestamp
-    //             && event.amount.toString() === premium
-    //         ));
-    //     });
+            const insurance = await appContract.getInsurance.call(flightNumber, timestamp, airline1 , {
+                from: passenger1
+            });
+            assert.equal(insurance,premium);
+        });
 
-    //     it('refuses a request to pay more than 1 ether', async () => {
-    //         const { flightNumber, timestamp } = testFlight;
+        it('refuses a request to pay more than 1 ether', async () => {
+            const { flightNumber, timestamp } = testFlight;
 
-    //         try {
-    //             await instance.buyInsurance(flightNumber, timestamp, {
-    //                 from: passenger2,
-    //                 value: web3.utils.toWei('2', 'ether'),
-    //             });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Up to 1 ether for purchasing flight insurance/);
-    //         }
-    //     });
-
-    //     it('refuses a request to purchase the insurance of flight before registration', async () => {
-    //         const flightNumber = 'TEST999';
-    //         const timestamp = Date.now();
-
-    //         try {
-    //             await instance.buyInsurance(flightNumber, timestamp, {
-    //                 from: passenger2,
-    //                 value: premium,
-    //             });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Flight is not registered/);
-    //         }
-    //     });
-
-    //     it('refuses any requests when the contract is not operational', async () => {
-    //         const { flightNumber, timestamp } = testFlight;
-
-    //         await instance.setOperatingStatus(false, { from: owner });
-
-    //         try {
-    //             await instance.buyInsurance(flightNumber, timestamp, {
-    //                 from: passenger2,
-    //                 value: premium,
-    //             });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Contract is currently not operational/);
-    //         }
-
-    //         await instance.setOperatingStatus(true, { from: owner });
-    //     });
-    // });
+            try {
+                await appContract.buyInsurance(flightNumber, timestamp, airline1,{
+                    from: passenger2,
+                    value: web3.utils.toWei('2', 'ether'),
+                });
+            } catch (error) {
+                assert.match(error.message, /Up to 1 ether for purchasing flight insurance/);
+            }
+        });
+    });
 
     // describe('fetchFlightStatus function', () => {
     //     it('emits OracleRequest event', async () => {
@@ -247,24 +194,6 @@ contract('FlightSuretyApp', (accounts) => {
     //         });
     //     });
 
-    //     it('refuses any requests when the contract is not operational', async () => {
-    //         const { flightNumber, timestamp } = testFlight;
-
-    //         await instance.setOperatingStatus(false, { from: owner });
-
-    //         try {
-    //             await instance.fetchFlightStatus(
-    //                 flightNumber,
-    //                 timestamp,
-    //                 { from: passenger1 },
-    //             );
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Contract is currently not operational/);
-    //         }
-
-    //         await instance.setOperatingStatus(true, { from: owner });
-    //     });
     // });
 
     // describe('registerOracle function', async () => {
@@ -292,21 +221,6 @@ contract('FlightSuretyApp', (accounts) => {
     //         }
     //     });
 
-    //     it('refuses any requests when the contract is not operational', async () => {
-    //         await instance.setOperatingStatus(false, { from: owner });
-
-    //         try {
-    //             await instance.registerOracle({
-    //                 from: oracles[1].address,
-    //                 value: fee,
-    //             });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Contract is currently not operational/);
-    //         }
-
-    //         await instance.setOperatingStatus(true, { from: owner });
-    //     });
     // });
 
     // describe('getOracleIndexes function', () => {

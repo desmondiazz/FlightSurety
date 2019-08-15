@@ -4,8 +4,9 @@ import "../node_modules/openzeppelin-solidity/contracts/math/SafeMath.sol";
 
 import "./Authorizable.sol";
 import "./AirlineControl.sol";
+import "./Insurance.sol";
 
-contract FlightSuretyData is Authorizable , AirlineControl {
+contract FlightSuretyData is Authorizable , AirlineControl , Insurance {
     using SafeMath for uint256;
 
     /********************************************************************************************/
@@ -95,10 +96,10 @@ contract FlightSuretyData is Authorizable , AirlineControl {
     }
 
     function registeredAirlinesCount()
-        external
-        view
-        onlyAuthorizedContract
-        returns(uint)
+    external
+    view
+    onlyAuthorizedContract
+    returns(uint)
     {
         return AirlineControl.getRegisteredAirlinesCount();
     }
@@ -160,6 +161,8 @@ contract FlightSuretyData is Authorizable , AirlineControl {
 
     function setAirlineOperational(address airline)
     external
+    requireIsOperational
+    onlyAuthorizedContract
     {
         AirlineControl.makeAirlineOperational(airline);
     }
@@ -167,6 +170,7 @@ contract FlightSuretyData is Authorizable , AirlineControl {
     function getFunds(address airline)
     external
     view
+    requireIsOperational
     returns(uint)
     {
         return airlines[airline].funds;
@@ -177,8 +181,22 @@ contract FlightSuretyData is Authorizable , AirlineControl {
     * @dev Buy insurance for a flight
     *
     */
-    function buy()external payable{
+    function buy(bytes32 insuranceKey, uint amount)
+    external
+    payable
+    requireIsOperational
+    onlyAuthorizedContract
+    {
+        Insurance.buyInsurance(insuranceKey,amount);
+    }
 
+    function getinsurance(bytes32 key)
+    external
+    view
+    requireIsOperational
+    returns(uint)
+    {
+        return Insurance.getInsurance(key);
     }
 
     /**
