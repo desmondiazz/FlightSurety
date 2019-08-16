@@ -197,12 +197,15 @@ contract FlightSuretyApp {
     */
 
     function processFlightStatus(address airline,string memory flight,uint256 timestamp,uint8 statusCode) internal {
-        
+        bytes32 flightKey = getFlightKey(airline,flight,timestamp);
+        flights[flightKey].statusCode = statusCode;
 
     }
 
     // Generate a request for oracles to fetch flight information
-    function fetchFlightStatus ( address airline, string flight, uint256 timestamp) external {
+    function fetchFlightStatus ( address airline, string flight, uint256 timestamp)
+    external
+    {
         uint8 index = getRandomIndex(msg.sender);
 
         // Generate a unique key for storing the request

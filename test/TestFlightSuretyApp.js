@@ -20,17 +20,27 @@ contract('FlightSuretyApp', (accounts) => {
         passenger2,
     ] = accounts;
 
+    const oracles = accounts.slice(20, 49);
+    const TEST_ORACLES_COUNT = 20;
+
     const owner = airline1;
 
     const premium = web3.utils.toWei('1', 'ether');
     const payout = web3.utils.toWei('1.5', 'ether');
 
-    // const oracles = accounts.slice(10, 30).map(account => new MockOracle(account));
-
     const testFlight = {
-        flightNumber: 'ABC12',
-        timestamp: Date.parse('01 Jan 2009 09:00:00 GMT'),
+        flightNumber: 'ND1309',
+        timestamp: Math.floor(Date.now() / 1000),
     };
+
+    // Watch contract events
+    const STATUS_CODE_UNKNOWN = 0;
+    const STATUS_CODE_ON_TIME = 10;
+    const STATUS_CODE_LATE_AIRLINE = 20;
+    const STATUS_CODE_LATE_WEATHER = 30;
+    const STATUS_CODE_LATE_TECHNICAL = 40;
+    const STATUS_CODE_LATE_OTHER = 50;
+
 
     before('setup contract', async () => {
         dataContract = await FlightSuretyData.deployed();
@@ -148,7 +158,7 @@ contract('FlightSuretyApp', (accounts) => {
         });
     });
 
-    describe('buyInsurance function', () => {
+    describe('But Insurance', () => {
         it('allows passengers to purchase insurance', async () => {
             const { flightNumber, timestamp } = testFlight;
 
@@ -177,78 +187,62 @@ contract('FlightSuretyApp', (accounts) => {
         });
     });
 
-    // describe('fetchFlightStatus function', () => {
-    //     it('emits OracleRequest event', async () => {
-    //         const { flightNumber, timestamp } = testFlight;
-    //         const tx = await instance.fetchFlightStatus(
-    //             flightNumber,
-    //             timestamp,
-    //             { from: passenger1 },
-    //         );
-    //         truffleAssert.eventEmitted(tx, 'OracleRequest', (event) => {
-    //             requestIndex = event.index.toNumber();
-    //             return (
-    //                 event.flight === flightNumber
-    //                 && event.timestamp.toNumber() === timestamp
-    //             );
-    //         });
-    //     });
+    describe('Oracles Registration', async () => {
+        it('can register oracles', async () => {
+            let fee = await appContract.REGISTRATION_FEE.call();
+        
+            for(let a=0; a<TEST_ORACLES_COUNT; a++) {
+              await appContract.registerOracle({ from: oracles[a], value: fee });
+              let result = await appContract.getMyIndexes.call({from: oracles[a]});
+              console.log(`Oracle Registered: ${result[0]}, ${result[1]}, ${result[2]}`);
+            }
+          });
 
-    // });
+        it('refuses a request without adequet fee', async () => {
+            try {
+                await appContract.registerOracle({
+                    from: oracles[1],
+                    value: web3.utils.toWei('.5', 'ether'),
+                });
+                throw new Error('unreachable error');
+            } catch (error) {
+                assert.match(error.message, /Registration fee is required/);
+            }
+        });
 
-    // describe('registerOracle function', async () => {
-    //     const fee = web3.utils.toWei('1', 'ether');
+        it('refuses a request from not registered oracle', async () => {
+            try {
+                await appContract.getMyIndexes.call({ from: oracles[21] });
+                throw new Error('unreachable error');
+            } catch (error) {
+                assert.match(error.message, /Not registered as an oracle/);
+            }
+        });
 
-    //     it('registers a oracle', async () => {
-    //         const tx = await instance.registerOracle({
-    //             from: oracles[0].address,
-    //             value: fee,
-    //         });
-    //         truffleAssert.eventEmitted(tx, 'OracleRegistered', event => (
-    //             event.account === oracles[0].address
-    //         ));
-    //     });
+    });
 
-    //     it('refuses a request without adequet fee', async () => {
-    //         try {
-    //             await instance.registerOracle({
-    //                 from: oracles[1].address,
-    //                 value: web3.utils.toWei('.5', 'ether'),
-    //             });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Inadequet registration fee/);
-    //         }
-    //     });
+    describe('Oracle Response',()=>{
+        it('can request flight status', async () => {
+            const flight = testFlight.flightNumber;
+            const timestamp = testFlight.timestamp;
+            await appContract.fetchFlightStatus(airline1, flight, timestamp,{from:passenger1});
+            for(let a=1; a<TEST_ORACLES_COUNT; a++) {
+                let oracleIndexes = await appContract.getMyIndexes.call({ from: oracles[a]});
+                for(let idx=0;idx<3;idx++) {
+                    try {
+                        await appContract.submitOracleResponse(oracleIndexes[idx], airline1, flight, timestamp, STATUS_CODE_ON_TIME, { from: oracles[a] });        
+                        console.log(oracleIndexes[idx].toString(),airline1,flight,timestamp);
+                        console.log('Response accepted');
+                    }
+                    catch(e) {
+                        // console.log(e.message);
+                    }        
+                }
+            }
+        });
+    });
 
-    // });
-
-    // describe('getOracleIndexes function', () => {
-    //     it('returns indexes of registered oracle', async () => {
-    //         const oracle = oracles[0];
-    //         const indexes = await instance.getOracleIndexes.call({ from: oracle.address });
-    //         oracle.setIndexes(indexes);
-
-    //         assert.equal(oracle.indexes.length, 3);
-    //         oracle.indexes.forEach((index) => {
-    //             assert.isNumber(index);
-    //             assert.isAtLeast(index, 0);
-    //             assert.isAtMost(index, 9);
-    //         });
-    //     });
-
-    //     it('refuses a request from not registered oracle', async () => {
-    //         const oracle = oracles[1];
-    //         try {
-    //             await instance.getOracleIndexes.call({ from: oracle.address });
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Not registered as an oracle/);
-    //         }
-    //     });
-    // });
-
-    // describe('submitOracleResponse function', () => {
+    describe('submitOracleResponse function', () => {
     //     let validOracles;
     //     let invalidOracles;
 
@@ -297,112 +291,112 @@ contract('FlightSuretyApp', (accounts) => {
     //         ));
     //     });
 
-    //     it('emits FlightStatusInfo event when third response submitted', async () => {
-    //         if (validOracles.length < 3) {
-    //             // eslint-disable-next-line no-console
-    //             console.log('There are less than 3 oracles with valid index. Please rerun test.');
-    //             return;
-    //         }
+    //     // it('emits FlightStatusInfo event when third response submitted', async () => {
+    //     //     if (validOracles.length < 3) {
+    //     //         // eslint-disable-next-line no-console
+    //     //         console.log('There are less than 3 oracles with valid index. Please rerun test.');
+    //     //         return;
+    //     //     }
 
-    //         await instance.submitOracleResponse(
-    //             requestIndex,
-    //             flightNumber,
-    //             timestamp,
-    //             statusCode,
-    //             { from: validOracles[1].address },
-    //         );
+    //     //     await instance.submitOracleResponse(
+    //     //         requestIndex,
+    //     //         flightNumber,
+    //     //         timestamp,
+    //     //         statusCode,
+    //     //         { from: validOracles[1].address },
+    //     //     );
 
-    //         const tx = await instance.submitOracleResponse(
-    //             requestIndex,
-    //             flightNumber,
-    //             timestamp,
-    //             statusCode,
-    //             { from: validOracles[2].address },
-    //         );
+    //     //     const tx = await instance.submitOracleResponse(
+    //     //         requestIndex,
+    //     //         flightNumber,
+    //     //         timestamp,
+    //     //         statusCode,
+    //     //         { from: validOracles[2].address },
+    //     //     );
 
-    //         truffleAssert.eventEmitted(tx, 'FlightStatusInfo', event => (
-    //             event.flight === flightNumber
-    //             && event.timestamp.toNumber() === timestamp
-    //             && event.status.toNumber() === statusCode
-    //         ));
-    //     });
+    //     //     truffleAssert.eventEmitted(tx, 'FlightStatusInfo', event => (
+    //     //         event.flight === flightNumber
+    //     //         && event.timestamp.toNumber() === timestamp
+    //     //         && event.status.toNumber() === statusCode
+    //     //     ));
+    //     // });
 
-    //     it('refuses a request to submit to a closed oracle request', async () => {
-    //         if (validOracles.length < 4) {
-    //             // eslint-disable-next-line no-console
-    //             console.log('There are less than 4 oracles with valid index. Please rerun test.');
-    //             return;
-    //         }
+    //     // it('refuses a request to submit to a closed oracle request', async () => {
+    //     //     if (validOracles.length < 4) {
+    //     //         // eslint-disable-next-line no-console
+    //     //         console.log('There are less than 4 oracles with valid index. Please rerun test.');
+    //     //         return;
+    //     //     }
 
-    //         try {
-    //             await instance.submitOracleResponse(
-    //                 requestIndex,
-    //                 flightNumber,
-    //                 timestamp,
-    //                 statusCode,
-    //                 { from: validOracles[3].address },
-    //             );
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Request is closed/);
-    //         }
-    //     });
+    //     //     try {
+    //     //         await instance.submitOracleResponse(
+    //     //             requestIndex,
+    //     //             flightNumber,
+    //     //             timestamp,
+    //     //             statusCode,
+    //     //             { from: validOracles[3].address },
+    //     //         );
+    //     //         throw new Error('unreachable error');
+    //     //     } catch (error) {
+    //     //         assert.match(error.message, /Request is closed/);
+    //     //     }
+    //     // });
 
-    //     it('refuses a request from a oracle does not have the requested index', async () => {
-    //         if (invalidOracles.length === 0) {
-    //             // eslint-disable-next-line no-console
-    //             console.log('There are no oracles with invalid index. Please rerun test.');
-    //             return;
-    //         }
+    //     // it('refuses a request from a oracle does not have the requested index', async () => {
+    //     //     if (invalidOracles.length === 0) {
+    //     //         // eslint-disable-next-line no-console
+    //     //         console.log('There are no oracles with invalid index. Please rerun test.');
+    //     //         return;
+    //     //     }
 
-    //         try {
-    //             await instance.submitOracleResponse(
-    //                 requestIndex,
-    //                 flightNumber,
-    //                 timestamp,
-    //                 statusCode,
-    //                 { from: invalidOracles[0].address },
-    //             );
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Index does not match oracle request/);
-    //         }
-    //     });
+    //     //     try {
+    //     //         await instance.submitOracleResponse(
+    //     //             requestIndex,
+    //     //             flightNumber,
+    //     //             timestamp,
+    //     //             statusCode,
+    //     //             { from: invalidOracles[0].address },
+    //     //         );
+    //     //         throw new Error('unreachable error');
+    //     //     } catch (error) {
+    //     //         assert.match(error.message, /Index does not match oracle request/);
+    //     //     }
+    //     // });
 
-    //     it('refuses a request from not registered oracle', async () => {
-    //         try {
-    //             await instance.submitOracleResponse(
-    //                 requestIndex,
-    //                 flightNumber,
-    //                 timestamp,
-    //                 statusCode,
-    //                 { from: airline1 },
-    //             );
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Not registered oracle/);
-    //         }
-    //     });
+    //     // it('refuses a request from not registered oracle', async () => {
+    //     //     try {
+    //     //         await instance.submitOracleResponse(
+    //     //             requestIndex,
+    //     //             flightNumber,
+    //     //             timestamp,
+    //     //             statusCode,
+    //     //             { from: airline1 },
+    //     //         );
+    //     //         throw new Error('unreachable error');
+    //     //     } catch (error) {
+    //     //         assert.match(error.message, /Not registered oracle/);
+    //     //     }
+    //     // });
 
-    //     it('refuses any requests when the contract is not operational', async () => {
-    //         await instance.setOperatingStatus(false, { from: owner });
+    //     // it('refuses any requests when the contract is not operational', async () => {
+    //     //     await instance.setOperatingStatus(false, { from: owner });
 
-    //         try {
-    //             await instance.submitOracleResponse(
-    //                 requestIndex,
-    //                 flightNumber,
-    //                 timestamp,
-    //                 statusCode,
-    //                 { from: oracles[0].address },
-    //             );
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Contract is currently not operational/);
-    //         }
+    //     //     try {
+    //     //         await instance.submitOracleResponse(
+    //     //             requestIndex,
+    //     //             flightNumber,
+    //     //             timestamp,
+    //     //             statusCode,
+    //     //             { from: oracles[0].address },
+    //     //         );
+    //     //         throw new Error('unreachable error');
+    //     //     } catch (error) {
+    //     //         assert.match(error.message, /Contract is currently not operational/);
+    //     //     }
 
-    //         await instance.setOperatingStatus(true, { from: owner });
-    //     });
-    // });
+    //     //     await instance.setOperatingStatus(true, { from: owner });
+    //     // });
+    });
 
     // describe('withdrawalRefund function', () => {
     //     it('allows passengers to withdrawal payout', async () => {
