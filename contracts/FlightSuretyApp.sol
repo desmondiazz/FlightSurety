@@ -199,7 +199,6 @@ contract FlightSuretyApp {
     function processFlightStatus(address airline,string memory flight,uint256 timestamp,uint8 statusCode) internal {
         bytes32 flightKey = getFlightKey(airline,flight,timestamp);
         flights[flightKey].statusCode = statusCode;
-
     }
 
     // Generate a request for oracles to fetch flight information
@@ -214,6 +213,23 @@ contract FlightSuretyApp {
         emit OracleRequest(index, airline, flight, timestamp);
     }
 
+    function getFlightStatusVotes(uint8 index,address airline,string flight,uint256 timestamp,uint8 statusCode)
+    public
+    view
+    returns(uint)
+    {
+        bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp));
+        return oracleResponses[key].responses[statusCode].length;
+    }
+
+    function getFlightStatus(address airline,string memory flight,uint256 timestamp)
+    public
+    view
+    returns(uint)
+    {
+        bytes32 flightKey = getFlightKey(airline,flight,timestamp);
+        return flights[flightKey].statusCode;
+    }
 
     /********************************************************************************************/
     /*                                     Private FUNCTIONS                             */
@@ -335,6 +351,7 @@ contract FlightSuretyApp {
     function submitOracleResponse(uint8 index,address airline,string flight,uint256 timestamp,uint8 statusCode)
     external
     {
+        require(oracles[msg.sender].isRegistered, "Not registered as an oracle");
         require((oracles[msg.sender].indexes[0] == index) || (oracles[msg.sender].indexes[1] == index) || (oracles[msg.sender].indexes[2] == index), "Index does not match oracle request");
 
 
@@ -347,7 +364,7 @@ contract FlightSuretyApp {
         // oracles respond with the *** same *** information
         emit OracleReport(airline, flight, timestamp, statusCode);
         if (oracleResponses[key].responses[statusCode].length >= MIN_RESPONSES) {
-
+            oracleResponses[key].isOpen = false;
             emit FlightStatusInfo(airline, flight, timestamp, statusCode);
 
             // Handle flight status as appropriate
