@@ -112,6 +112,18 @@ contract FlightSuretyApp {
         return flightSuretyData.isOperational();
     }
 
+    function isFlightStatusToPayout(bytes32 flightKey)
+    internal
+    view
+    returns(bool)
+    {
+        uint8 statusCode = flights[flightKey].statusCode;
+        return (
+            statusCode == STATUS_CODE_LATE_AIRLINE ||
+            statusCode == STATUS_CODE_LATE_TECHNICAL
+        );
+    }
+
     /********************************************************************************************/
     /*                                     SMART CONTRACT FUNCTIONS                             */
     /********************************************************************************************/
@@ -176,6 +188,7 @@ contract FlightSuretyApp {
     requireIsOperational
     airlineIsOperational(airline)
     {
+        require(msg.value > 0 ether,'Insurance Amount should be greater then 0 Ether');
         require(msg.value <= MAX_INSURANCE, "Up to 1 ether for purchasing flight insurance");
         bytes32 insuranceKey = _buildInsuranceKey(msg.sender, flight, timestamp);
         flightSuretyData.buy(insuranceKey, msg.value);
@@ -190,6 +203,31 @@ contract FlightSuretyApp {
         return flightSuretyData.getinsurance(insuranceKey);
     }
 
+
+    function getInsurancePayout(string memory flight, uint timestamp)
+    public
+    view
+    returns(uint)
+    {
+        bytes32 insuranceKey = _buildInsuranceKey(msg.sender, flight, timestamp);
+        return flightSuretyData.getinsurancePayout(insuranceKey);
+    }
+
+    function validateInsurance(bytes32 key)
+    internal
+    returns(bool)
+    {
+        uint amount = flightSuretyData.getinsurance(key);
+        return amount > 0 ether;
+    }
+
+    function validateWithdrawRequest(bytes32 key)
+    internal
+    returns(bool)
+    {
+        uint amount = flightSuretyData.getinsurancePayout(key);
+        return amount > 0 ether;
+    }
 
    /**
     * @dev Called after oracle has updated flight status
@@ -229,6 +267,33 @@ contract FlightSuretyApp {
     {
         bytes32 flightKey = getFlightKey(airline,flight,timestamp);
         return flights[flightKey].statusCode;
+    }
+
+    function requestCreditInsurance(address airline,string memory flight,uint256 timestamp)
+    public
+    requireIsOperational
+    {
+        bytes32 insuranceKey = _buildInsuranceKey(msg.sender,flight,timestamp);
+        require(validateInsurance(insuranceKey),'No insurance Found');
+
+        bytes32 flightKey = getFlightKey(airline,flight,timestamp);
+        require(isFlightStatusToPayout(flightKey),'Flight is not availaible for payout');
+
+        uint insuranceAmount = flightSuretyData.getinsurance(insuranceKey);
+        uint payout = insuranceAmount.mul(3).div(2);
+
+        flightSuretyData.deleteInsurance(insuranceKey);
+        flightSuretyData.creditInsurees(insuranceKey,payout);
+    }
+
+    function withdrawAmount(string memory flight,uint timestamp)
+    public
+    requireIsOperational
+    {
+        bytes32 insuranceKey = _buildInsuranceKey(msg.sender,flight,timestamp);
+        require(validateWithdrawRequest(insuranceKey),'No payout Availaible');
+        uint payoutAmt = flightSuretyData.pay(insuranceKey);
+        msg.sender.transfer(payoutAmt);
     }
 
     /********************************************************************************************/

@@ -198,11 +198,33 @@ contract FlightSuretyData is Authorizable , AirlineControl , Insurance {
     {
         return Insurance.getInsurance(key);
     }
+    
+    function getinsurancePayout(bytes32 key)
+    external
+    view
+    requireIsOperational
+    returns(uint)
+    {
+        return Insurance.getPayout(key);
+    }
 
     /**
      *  @dev Credits payouts to insurees
     */
-    function creditInsurees( ) external pure {
+    function creditInsurees(bytes32 key,uint amount)
+    external
+    requireIsOperational
+    onlyAuthorizedContract
+    {
+        Insurance.creditPayout(key,amount);
+    }
+
+    function deleteInsurance(bytes32 key)
+    external
+    requireIsOperational
+    onlyAuthorizedContract
+    {
+        Insurance.removeInsurance(key);
     }
 
 
@@ -210,7 +232,13 @@ contract FlightSuretyData is Authorizable , AirlineControl , Insurance {
      *  @dev Transfers eligible payout funds to insuree
      *
     */
-    function pay ( ) external pure {
+    function pay(bytes32 key)
+    external
+    requireIsOperational
+    onlyAuthorizedContract
+    returns(uint)
+    {
+       return Insurance.refund(key);
     }
 
    /**

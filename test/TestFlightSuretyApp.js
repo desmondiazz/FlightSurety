@@ -1,7 +1,6 @@
 const FlightSuretyApp = artifacts.require('FlightSuretyApp');
 const FlightSuretyData = artifacts.require('FlightSuretyData');
 const truffleAssert = require('truffle-assertions');
-// const MockOracle = require('../utils/mockOracle');
 
 contract('FlightSuretyApp', (accounts) => {
     let instance;
@@ -167,10 +166,24 @@ contract('FlightSuretyApp', (accounts) => {
                 value: premium,
             });
 
-            const insurance = await appContract.getInsurance.call(flightNumber, timestamp, airline1 , {
+            const insurance = await appContract.getInsurance.call(flightNumber, timestamp , {
                 from: passenger1
             });
             assert.equal(insurance,premium);
+        });
+        
+        it('should refuse to buy insurance with if amount <= 0', async () => {
+            const amt = web3.utils.toWei('0', 'ether');
+            const { flightNumber, timestamp } = testFlight;
+            try {
+                await appContract.buyInsurance(flightNumber, timestamp, airline1 , {
+                    from: passenger2,
+                    value: amt,
+                });
+                throw new Error('unreachable code');
+            } catch (error) {
+                assert.match(error.message,/Insurance Amount should be greater then 0 Ether/);
+            }
         });
 
         it('refuses a request to pay more than 1 ether', async () => {
@@ -292,77 +305,96 @@ contract('FlightSuretyApp', (accounts) => {
         });
     });
 
-    // describe('withdrawalRefund function', () => {
-    //     it('allows passengers to withdrawal payout', async () => {
-    //         if (!canPayout) {
-    //             // eslint-disable-next-line no-console
-    //             console.log('There are no flights to pay back credit. Please rerun test.');
-    //             return;
-    //         }
+    describe('Payout Request',()=>{
+        const flight = testFlight.flightNumber;
+        const timestamp = testFlight.timestamp;
+        
+        it('Should not allow to request insurance credit for flights with valid status',async()=>{
+            try{
+                await appContract.requestCreditInsurance(airline1,flight,timestamp, {
+                    from: passenger1
+                });
+                throw new Error('unreachable code');
+            } catch (e){
+                assert.match(e.message,/Flight is not availaible for payout/);
+            }
+        });
 
-    //         const { flightNumber, timestamp } = testFlight;
-    //         const balanceBefore = await web3.eth.getBalance(passenger1);
+        it('Should allow to request insurance credit for flights which are late',async()=>{
+            await appContract.requestCreditInsurance(airline2,flight, timestamp, {
+                from: passenger1
+            });
+            const insurancePayout = await appContract.getInsurancePayout.call(flight, timestamp, {
+                from: passenger1
+            });
+            assert.equal(insurancePayout,payout);
+        });
 
-    //         await instance.withdrawalRefund(
-    //             flightNumber,
-    //             timestamp,
-    //             { from: passenger1, gasPrice: 0 },
-    //         );
+        it('Should not allow to request insurance credit more than once',async()=>{
+            try {
+                await appContract.requestCreditInsurance(airline2,flight, timestamp, {
+                    from: passenger1
+                });
+                throw new Error('unreachable code');
+            } catch (error) {
+                assert.match(error.message,/No insurance Found/);                
+            }
+        });
 
-    //         const balanceAfter = await web3.eth.getBalance(passenger1);
+        it('Should not allow to request a insurance credit without valid insurance',async()=>{
+            try {
+                await appContract.requestCreditInsurance(airline2,flight, timestamp, {
+                    from: passenger2
+                });
+                throw new Error('unreachable code');
+            } catch (e) {
+                assert.match(e.message,/No insurance Found/);
+            }
+        });
+    });
 
-    //         assert.equal(
-    //             Number(balanceAfter) - Number(balanceBefore),
-    //             Number(payout),
-    //         );
-    //     });
+    describe('Fund Withdrwal',()=>{
+        const flight = testFlight.flightNumber;
+        const timestamp = testFlight.timestamp;
 
-    //     it('does not allow to withdrawal if flight does not delay', async () => {
-    //         const flightNumber = 'TEST234';
-    //         const timestamp = Date.parse('02 Jan 2009 09:00:00 GMT');
+        it('should be able to withdraw funds',async()=>{
+            const balanceBefore = await web3.eth.getBalance(passenger1);
+            await appContract.withdrawAmount(flight,timestamp,{
+                from:passenger1,
+                gasPrice: 0
+            });
+            const balanceAfter = await web3.eth.getBalance(passenger1);
+            assert.equal(
+                Number(balanceAfter) - Number(balanceBefore),
+                Number(payout),
+            );
+        });
 
-    //         await instance.registerFlight(flightNumber, timestamp, { from: airline1 });
-    //         await instance.buyInsurance(flightNumber, timestamp, {
-    //             from: passenger1,
-    //             value: premium,
-    //         });
+        it('should not be able to withdraw funds twice',async()=>{
+            const balanceBefore = await web3.eth.getBalance(passenger1);
+            try {
+                await appContract.withdrawAmount(flight,timestamp,{
+                    from:passenger1,
+                    gasPrice: 0
+                });
+                throw new Error('unreachable code');
+            } catch (e) {
+                assert.match(e.message,/No payout Availaible/);
+                const balanceAfter = await web3.eth.getBalance(passenger1);
+                assert.equal(Number(balanceAfter),Number(balanceBefore));    
+            }
+        });
 
-    //         try {
-    //             await instance.withdrawalRefund(
-    //                 flightNumber,
-    //                 timestamp,
-    //                 { from: passenger1, gasPrice: 0 },
-    //             );
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Not a flight to payout/);
-    //         }
-    //     });
-
-    //     it('refuses any requests when the contract is not operational', async () => {
-    //         const flightNumber = 'TEST345';
-    //         const timestamp = Date.parse('03 Jan 2009 09:00:00 GMT');
-
-    //         await instance.registerFlight(flightNumber, timestamp, { from: airline1 });
-    //         await instance.buyInsurance(flightNumber, timestamp, {
-    //             from: passenger1,
-    //             value: premium,
-    //         });
-
-    //         await instance.setOperatingStatus(false, { from: owner });
-
-    //         try {
-    //             await instance.withdrawalRefund(
-    //                 flightNumber,
-    //                 timestamp,
-    //                 { from: passenger1, gasPrice: 0 },
-    //             );
-    //             throw new Error('unreachable error');
-    //         } catch (error) {
-    //             assert.match(error.message, /Contract is currently not operational/);
-    //         }
-
-    //         await instance.setOperatingStatus(true, { from: owner });
-    //     });
-    // });
+        it('Should not allow passanger to withdraw funds without any insurance',async()=>{
+            try {
+                await appContract.withdrawAmount(flight,timestamp,{
+                    from:passenger2,
+                    gasPrice: 0
+                });
+                throw new Error('unreachable code');
+            } catch (e) {
+                assert.match(e.message,/No payout Availaible/);
+            }
+        });
+    });
 });
