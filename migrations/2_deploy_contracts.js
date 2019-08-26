@@ -8,7 +8,9 @@ module.exports = function(deployer) {
     deployer.deploy(FlightSuretyData)
     .then(() => {
         return deployer.deploy(FlightSuretyApp,FlightSuretyData.address)
-                .then(() => {
+                .then(async() => {
+                    const instance = await FlightSuretyData.deployed();
+                    await instance.authorizeContract(FlightSuretyApp.address)
                     let config = {
                         localhost: {
                             url: 'http://localhost:8545',
