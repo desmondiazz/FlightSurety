@@ -19,10 +19,35 @@ import './flightsurety.css';
 
         // User-submitted transaction
         DOM.elid('submit-oracle').addEventListener('click', () => {
-            let flight = DOM.elid('flight-number').value;
+            let flight = DOM.elid('flight-list').value;
+            let timestamp = parseInt(DOM.elid('flight-depature').value);
             // Write transaction
-            contract.fetchFlightStatus(flight, (error, result) => {
+            contract.fetchFlightStatus(flight, timestamp, (error, result) => {
                 display('Oracles', 'Trigger oracles', [ { label: 'Fetch Flight Status', error: error, value: result.flight + ' ' + result.timestamp} ]);
+            });
+        })
+        
+        DOM.elid('check-status').addEventListener('click', () => {
+            let flight = DOM.elid('flight-list').value;
+            let timestamp = parseInt(DOM.elid('flight-depature').value);
+            // Write transaction
+            contract.checkFlightStatus(flight, timestamp, (error, result) => {
+                const STATUS_CODE_UNKNOWN = 0;
+                const STATUS_CODE_ON_TIME = 10;
+                const STATUS_CODE_LATE_AIRLINE = 20;
+                const STATUS_CODE_LATE_WEATHER = 30;
+                const STATUS_CODE_LATE_TECHNICAL = 40;
+                const STATUS_CODE_LATE_OTHER = 50;
+            
+                const statusCodes = {
+                    0:' is UNKNOWN',
+                    10:' is ON TIME',
+                    20:' is DELAYED',
+                    30:' is DELAYED DUE TO WEATHER',
+                    40:' is DELAYED DUE TO TECHNICAL FAULT',
+                    50:' is DELAYED DUE TO UNKNOWN REASONS',
+                };
+                display('Oracles', 'Trigger oracles', [ { label: 'Flight Status :', error: error, value: flight + ' ' + timestamp + ' ' + statusCodes[result]} ]);
             });
         })
     

@@ -23,8 +23,31 @@
 
         <div id="display-wrapper" class="top-20">
         </div>
+        <div class="row">
+            <div class="col-md-12">
+                <label for="">Select a Flight & Depature</label>
+            </div>
+            <div class="col-md-6">
+                <select name="" id="flight-list">
+                    <option value="Flight-A1">Flight-A1</option>
+                    <option value="Flight-B18">Flight-B18</option>
+                    <option value="Flight-C36">Flight-C36</option>
+                </select>
+                <select name="" id="flight-depature">
+                    <option value="1566950400">12 AM</option>
+                    <option value="1566972000">6 AM</option>
+                    <option value="1566993600">12 PM</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+            </div>
+        </div>
         <div class="row top-20">
-            <label class="form">Flight</label> <input type="text" id="flight-number"> <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn>
+            <!-- <label class="form">Flight</label> 
+            <input type="text" id="flight-number">  -->
+            <btn class="btn btn-primary" id="submit-oracle">Submit to Oracles</btn>
+            &nbsp;
+            <btn class="btn btn-primary" id="check-status">Check Flight status</btn>
         </div>
     </main>
 
